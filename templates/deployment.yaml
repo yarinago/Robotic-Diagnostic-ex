@@ -1,13 +1,13 @@
-apiVersion: apps/v1
+apiVersion: v1
 kind: Deployment
 metadata:
-  name: mlflow
+  name: {{ include "mlflow.fullname" . }}
   labels:
-    name: mlflow-deployment
+    name: {{ include "mlflow.fullname" . }}-deployment
   # instance: {{ .Release.Name }}
-    managed-by: helm
+    managed-by: {{ .Release.Service }}
 spec:
-  replicas: 2   # At least two replicas in case one will crash
+  replicas: {{ .Values.replicaCount }} # At least two replicas in case one will crash
   selector:
     matchLabels:
       name: mlflow-deployment
@@ -19,11 +19,11 @@ spec:
       # instance: {{ .Release.Name }}
     spec:
       containers:
-        - name: larribas-mlflow
-          image: larribas/mlflow:1.9.1 # If we use a private registry then we need to use ImagePullSecrets
-          imagePullPolicy: IfNotPresent
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}" # If we use a private registry then we need to use ImagePullSecrets
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: 80
+            - containerPort: {{ .Values.image.containerPort }}
           env:
           - name: BACKEND_STORE_URI
             value: "{{ .Values.db.type }}://{{ .Values.db.user }}:{{ .Values.db.password }}@{{ .Values.db.host }}:{{ .Values.db.port }}/{{ .Values.db.database }}"
@@ -31,35 +31,37 @@ spec:
             value: {{ .Values.default_artifact_root }}
           readinessProbe:
             httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: 0 # Start to check immediately (We can change according to the up-time of the app) 
-            periodSeconds: 2 # Check the app every 3 seconds (We can change to whatever we want)
-            timeoutSeconds: 10 # After X seconds the readiness probe time out (We can change accordingly)
-            failureThreshold: 5 # After X times the pod marked as unready (We can change accordingly)
+              path: {{ .Values.readinessProbe.path }}
+              port: {{ .Values.readinessProbe.port }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }} # Start to check immediately (We can change according to the up-time of the app) 
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }} # Check the app every X seconds (We can change to whatever we want)
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }} # After X seconds the readiness probe time out (We can change accordingly)
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }} # After X times the pod marked as unready (We can change accordingly)
           livenessProbe:
             httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: 10 # Start to check after 3 seconds (We can change according to the up-time of the app) 
-            periodSeconds: 3 # Check the app every 3 seconds (We can change to whatever we want)
-            timeoutSeconds: 10 # After X seconds the liveness probe time out (We can change accordingly)
+              path: {{ .Values.livenessProbe.path }}
+              port:  {{ .Values.livenessProbe.port }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-          # Limits the amount of resources the app can use (We choose them)
-           #limits: 
-           #  cpu: 1
-           #  memory: 1Gi
-           volumeMounts:
-             - mountPath: "/export"
-               name: mlflow-volume
-     #nodeSelector: # Specify on which nodes the pod can exist
-     #  label:
-     #    name: mlflow
-     #  zone: eu-central-1-ham-1a
-     volumes:
-      - name: mlflow-volume
-        hostpath:
-          path: /mlflow-data
+            {{- toYaml .Values.resources | nindent 7 }}
+          volumeMounts:
+{{ toYaml .Values.volumeMounts | indent 7 }}
+{{- end }}
+{{- if .Values.volumes }}
+{{- with .Values.nodeSelector }}
+      nodeSelector: # Specify on which nodes the pod can exist
+        {{- toYaml . | nindent 5 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 5 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 5 }}
+    {{- end }}
+      volumes:
+{{ toYaml .Values.volumes | indent 5 }}
+{{- end }}

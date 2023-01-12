@@ -1,18 +1,34 @@
-replicaCount: 1
+# --- FOR DEPLOYMENT ---
+replicaCount: 2 # At least two replicas in case one will crash
 
 image:
-  repository: ayadi05/mlflow
-  tag: 1.5.1
+  repository: larribas/mlflow
+  tag: 1.9.1
   pullPolicy: IfNotPresent
+  containerPort: 80
 
-default_artifact_root: "s3://datalake/mlflow/artifacts"
+readinessProbe:
+  path: /
+  port: 80
+  initialDelaySeconds: 0
+  periodSeconds: 2
+  timeoutSeconds: 10
+  failureThreshold: 5
 
+livenessProbe:
+  httpGet:
+  path: /
+  port: 80
+  initialDelaySeconds: 10
+  periodSeconds: 3
+  timeoutSeconds: 10
 
+default_artifact_root: "/export" # Better option is to use s3 bucket - "s3://datalake/mlflow/artifacts"
 
 db:
   default:
     enabled: false
-  ## type can be 'postgresql', 'mysql' or any other db type that can be used in a db_uri
+  # type can be 'postgresql', 'mysql' or any other db type that can be used in a db_uri
   type: postgresql
   host: postgresql
   port: 5432
@@ -20,57 +36,71 @@ db:
   password: password
   database: postgres
 
-minio:
-  url: minio.default.svc.cluster.local:9000
-  accesskey: secret
-  secretkey: secret
-
-nameOverride: ""
-fullnameOverride: ""
-
-service:
-  type: NodePort
-  port: 80
-  annotations: {}
-  ## Set the LoadBalancer service type to internal only.
-  ## ref: https://kubernetes.io/docs/concepts/services-networking/service/#internal-load-balancer
-  ##
-  # loadBalancerIP:
-
-  ## Load Balancer sources
-  ## https://kubernetes.io/docs/tasks/access-application-cluster/configure-cloud-provider-firewall/#restrict-access-for-loadbalancer-service
-  ##
-  # loadBalancerSourceRanges:
-  # - 10.10.10.0/24
-
-## Configure Ingress based on the documentation here: https://kubernetes.io/docs/concepts/services-networking/ingress/
-##
-ingress:
-  enabled: false
-  annotations: {}
-  tls: []
-  hosts: [mlflow.test]
-  path: /
-
 resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+  #   cpu: 1
+  #   memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
-# volumes:
-#   - name: minio
-#     persistentVolumeClaim:
-#       claimName: minio
+volumeMounts:
+  - mountPath: "/export"
+    name: mlflow-volume
+
+volumes:
+  - name: mlflow-volume
+    persistentVolumeClaim:
+      claimName: minio
+    hostpath:
+          path: "/mlflow-data"
 
 nodeSelector: {}
+#  label:
+#    name: mlflow
+#  zone: eu-central-1-ham-1a
 
 tolerations: []
 
 affinity: {}
+
+
+
+# --- FOR SERVICE ---
+service:
+  annotations: {}
+  type: NodePort
+  port: 80
+  NodePort: 30303
+  targetPort: 80
+  # TODO: When we have a cluster setup and we know the cluster details, for high-availability we should use load-balancer type of
+  # Set the LoadBalancer service type to internal only.
+  # ref: https://kubernetes.io/docs/concepts/services-networking/service/#internal-load-balancer
+  #
+  # loadBalancerIP:
+
+  # Load Balancer sources
+  # https://kubernetes.io/docs/tasks/access-application-cluster/configure-cloud-provider-firewall/#restrict-access-for-loadbalancer-service
+  #
+  # loadBalancerSourceRanges:
+  # - 10.10.10.0/24
+
+
+
+# --- FOR INGRESS ---
+# Configure Ingress based on the documentation here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: false
+  annotations: {}
+  host: mlflow.dr.com
+  path: /
+  servicePort: 8080
+
+
+
+# --- FOR CHART ---
+dependencies:
+  - name: postgresql
+    version: ~10.3.6
+    repository: https://charts.bitnami.com/bitnami
+    condition: db.default.enabled
