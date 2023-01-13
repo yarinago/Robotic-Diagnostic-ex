@@ -2,8 +2,8 @@
 replicaCount: 2 # At least two replicas in case one will crash
 
 image:
-  repository: larribas/mlflow
-  tag: 1.9.1
+  repository: yarinago/diagnostic-robotic-ex # This image is based on larribas/mlflow and build according to the assignment
+  tag: 1.0.0
   pullPolicy: IfNotPresent
   containerPort: 80
 
