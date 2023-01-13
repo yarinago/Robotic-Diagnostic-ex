@@ -64,6 +64,9 @@ tolerations: []
 
 affinity: {}
 
+nameOverride: ""
+fullnameOverride: ""
+
 
 
 # --- FOR SERVICE ---
